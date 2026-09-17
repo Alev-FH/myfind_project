@@ -24,27 +24,38 @@ int main(int argc, char *argv[]) {
 
     SearchParams sp = { 0 };
     parseArguments(argc, argv, &sp);
+
+    // Print the SearchParams variables to see if the parseArguments function initializes them corectly.
     printf("Recursive option        : %s\n", sp.R_enabled == 1 ? "true" : "false");
     printf("Case insensitive option : %s\n", sp.i_enabled == 1 ? "true" : "false");
+    printf("num_of_files            : %d\n", sp.num_of_files);
+    printf("num_of_options          : %d\n", sp.num_of_options);
 
+    // Pint the files for testing. This will be removed.
     for (int i = 0; i < sp.num_of_files; i++) {
         printf("files: %s\n", sp.files[i]);
     }
 
     pid_t pid;
-    pid = fork();
     int error = 0;
 
-    if (pid == -1) {
-        return EXIT_FAILURE;
-    } else if (pid == 0) {
-        printf("Child process: %d\n", getpid());
-    } else {
-        printf("Parent process: %d\n", getpid());
-        pid_t childpid;
-        while ((childpid = waitpid(-1, NULL, WNOHANG))) {
-            if ((childpid == -1) && (error != EINTR)) {
-                break;
+    // Here we must fork so many times as num_of_files. Every process should search for a file.
+    for (int i = 0; i < sp.num_of_files; i++) {
+
+        pid = fork();
+
+        if (pid == -1) {
+            return EXIT_FAILURE;
+        } else if (pid == 0) {
+            printf("Child process: %d\n", getpid());
+            break;        // Break the loop when we are inside the child. We don't want the child to continue the for loop and fork again.
+        } else {
+            printf("Parent process: %d\n", getpid());
+            pid_t childpid;
+            while ((childpid = waitpid(-1, NULL, WNOHANG))) {
+                if ((childpid == -1) && (error != EINTR)) {
+                    break;
+                }
             }
         }
     }
@@ -82,25 +93,25 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
                     continue;
                 }
 
-                char **temp = realloc(sp->options, sizeof(double) * options_inc);
+                char **temp = realloc(sp->options, sizeof(double) * options_inc);        // Increase the size of the pointers array by +1 pointer
                 if (temp == NULL) {
                     fprintf(stderr, "Failed to reallocate memory for options array!\n");
                     exit(-1);
                 }
                 sp->options = temp;
-                sp->options[options_index] = strdup(argv[i]);
+                sp->options[options_index] = strdup(argv[i]);         // Allocate memory and copy the option argument to the pointers array options_index position.
 
                 options_inc++;
                 options_index++;
                 sp->num_of_options++;
             } else {
-                char **temp = realloc(sp->files, sizeof(double) * files_inc);
+                char **temp = realloc(sp->files, sizeof(double) * files_inc);        // Increase the size of the pointers array by +1 pointer
                 if (temp == NULL) {
                     fprintf(stderr, "Failed to reallocate memory for files array!\n");
                     exit(-1);
                 }
                 sp->files = temp;
-                sp->files[files_index] = strdup(argv[i]);
+                sp->files[files_index] = strdup(argv[i]);        // Allocate memory and copy the file argument to the pointers array files_index position.
 
                 files_inc++;
                 files_index++;
