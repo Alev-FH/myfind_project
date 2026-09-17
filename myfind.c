@@ -7,6 +7,10 @@
 #include <assert.h>
 #include <string.h>
 
+#define FILE_FOUND         0
+#define FILE_NOT_FOUND     1
+#define FILE_SEARCH_ERROR -1
+
 typedef struct {
     char **files;         // The files extracted from the command
     char **options;       // The options extracted from the command
@@ -36,10 +40,8 @@ int main(int argc, char *argv[]) {
         printf("files: %s\n", sp.files[i]);
     }
 
-    pid_t pid;
-    int error = 0;
-
     // Here we must fork so many times as num_of_files. Every process should search for a file.
+    pid_t pid;
     for (int i = 0; i < sp.num_of_files; i++) {
 
         pid = fork();
@@ -48,19 +50,59 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         } else if (pid == 0) {
             printf("Child process: %d\n", getpid());
-            break;        // Break the loop when we are inside the child. We don't want the child to continue the for loop and fork again.
+            // Here we have to search for the files. This part of the code will be run only from the child processes.
+            // int found = search_file(sp.files[i]);
+            exit(EXIT_FAILURE);
         } else {
             printf("Parent process: %d\n", getpid());
-            pid_t childpid;
-            while ((childpid = waitpid(-1, NULL, WNOHANG))) {
-                if ((childpid == -1) && (error != EINTR)) {
-                    break;
-                }
-            }
         }
     }
 
-    freeSearchParams(&sp);
+    // Here we have to wait for the children to finish execution. We first make sure that we are in the parent process. pid > 0.
+    if (pid > 0) {
+        int status;
+        int errors_occured = 0;
+        int remaining_children = sp.num_of_files;
+
+        while (remaining_children > 0) {
+            pid_t child_pid = wait(&status);
+
+            if (child_pid == -1) {
+                if (errno == EINTR) {        // Check if user or an external source terminated the parent waiting process.
+                    continue;
+                }
+
+                perror("wait(): An error has occured!\n");
+                errors_occured++;
+                break;
+            }
+
+            remaining_children--;
+
+            if (WIFEXITED(status)) {        // Check the return value of the child process.
+                int exit_code = WEXITSTATUS(status);
+
+                if (exit_code == FILE_FOUND) {
+                    fprintf(stdout, "File found\n");
+                } else if (exit_code == FILE_NOT_FOUND) {
+                    fprintf(stdout, "File not found\n");
+                } else {
+                    fprintf(stderr, "An error has occured!\n");
+                    errors_occured++;
+                }
+            } else if (WIFSIGNALED(status)) {        // Check if child process is terminated because of a signal
+                fprintf(stderr, "Child %d terminated unexpectedly. STATUS: %d\n", child_pid, WTERMSIG(status));
+                errors_occured++;
+            }
+        }
+
+        freeSearchParams(&sp);        // Free the SearchParams here because the parent is responsible for that.
+
+        if (errors_occured) {
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;        // After parent have waited for all children, exit.
+    }
 
     return EXIT_SUCCESS;
 }
