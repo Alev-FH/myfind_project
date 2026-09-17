@@ -27,6 +27,10 @@ int main(int argc, char *argv[]) {
     printf("Recursive option        : %s\n", sp.R_enabled == 1 ? "true" : "false");
     printf("Case insensitive option : %s\n", sp.i_enabled == 1 ? "true" : "false");
 
+    for (int i = 0; i < sp.num_of_files; i++) {
+        printf("files: %s\n", sp.files[i]);
+    }
+
     pid_t pid;
     pid = fork();
     int error = 0;
@@ -59,12 +63,12 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
     unsigned int options_inc   = 1;
 
     // This is to help us index the pointers of the pointers array.
-    unsigned int files_index   = 1;
+    unsigned int files_index   = 0;
     unsigned int options_index = 0;
 
     if (argc > 1) {
 
-        for (int i = 0; i < argc; i++) {
+        for (int i = 1; i < argc; i++) {
             if (strncmp(argv[i], "-", 1) == 0) {
 
                 // Check for specific flags
