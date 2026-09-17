@@ -88,6 +88,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
 
                 options_inc++;
                 options_index++;
+                sp->num_of_options++;
             } else {
                 char **temp = realloc(sp->files, sizeof(double) * files_inc);
                 if (temp == NULL) {
@@ -99,6 +100,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
 
                 files_inc++;
                 files_index++;
+                sp->num_of_files++;
             }
         }
     }
