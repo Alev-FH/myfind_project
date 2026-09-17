@@ -130,7 +130,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
                 } else if (strcmp(argv[i], "-i") == 0) {
                     sp->i_enabled = 1;
                 } else {
-                    printf("Option %s is not supported, it will be ignored!\n", argv[i]);
+                    fprintf(stdout, "Option %s is not supported, it will be ignored!\n", argv[i]);
                     print_usage(argv[0]);
                     continue;
                 }
