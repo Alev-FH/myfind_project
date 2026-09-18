@@ -6,13 +6,15 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <dirent.h>
 
 #define FILE_FOUND         0
 #define FILE_NOT_FOUND     1
 #define FILE_SEARCH_ERROR -1
 
 typedef struct {
-    char **files;         // The files extracted from the command
+    char *search_path;    // The search path. First argument after argument 0 that does is not an option, namely no -R or -i.
+    char **files;         // The files extracted from the command.
     char **options;       // The options extracted from the command
     int R_enabled;        // Wether or not the option -R is passed as a parameter 
     int i_enabled;        // Wether or not the option -R is passed as a parameter
@@ -22,6 +24,7 @@ typedef struct {
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
 static void print_usage(char *programm_name);
+static void lookUpFolder(char path[]);
 static void freeSearchParams(SearchParams *sp);
 
 int main(int argc, char *argv[]) {
@@ -30,6 +33,7 @@ int main(int argc, char *argv[]) {
     parseArguments(argc, argv, &sp);
 
     // Print the SearchParams variables to see if the parseArguments function initializes them corectly.
+    printf("path                    : %s\n", sp.search_path);
     printf("Recursive option        : %s\n", sp.R_enabled == 1 ? "true" : "false");
     printf("Case insensitive option : %s\n", sp.i_enabled == 1 ? "true" : "false");
     printf("num_of_files            : %d\n", sp.num_of_files);
@@ -52,6 +56,7 @@ int main(int argc, char *argv[]) {
             printf("Child process: %d\n", getpid());
             // Here we have to search for the files. This part of the code will be run only from the child processes.
             // int found = search_file(sp.files[i]);
+            lookUpFolder("/home/as/myfind_project");
             exit(EXIT_FAILURE);
         } else {
             printf("Parent process: %d\n", getpid());
@@ -118,6 +123,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
     // This is to help us index the pointers of the pointers array.
     unsigned int files_index   = 0;
     unsigned int options_index = 0;
+    unsigned int path_aquired  = 0;
 
     if (argc > 1) {
 
@@ -147,6 +153,12 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
                 options_index++;
                 sp->num_of_options++;
             } else {
+                if (path_aquired == 0) {        // The first non option argument after the argument 0 is always the path.
+                    sp->search_path = strdup(argv[i]);
+                    path_aquired++;
+                    continue;
+                }
+
                 char **temp = realloc(sp->files, sizeof(double) * files_inc);        // Increase the size of the pointers array by +1 pointer
                 if (temp == NULL) {
                     fprintf(stderr, "Failed to reallocate memory for files array!\n");
@@ -163,10 +175,27 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
     }
 }
 static void print_usage(char *programm_name) {
-    printf("Usage: %s [-R] [-i] [dateiname 1 dateiname n]\n\n", programm_name);
-    return;
+    printf("Usage: %s [path] [-R] [-i] [dateiname 1 dateiname n]\n\n", programm_name);
+}
+static void lookUpFolder(char path[]) {
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        fprintf(stderr, "Could not open directory %s\n", path);
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type != DT_UNKNOWN && entry->d_type == DT_DIR) {
+            printf("%s\n", entry->d_name);
+        }
+    }
+
+    closedir(dir);
 }
 static void freeSearchParams(SearchParams *sp) {
+    free(sp->search_path);
+
     if (sp->num_of_files) {
         for (int i = 0; i < sp->num_of_files; i++) {
             free(sp->files[i]);
