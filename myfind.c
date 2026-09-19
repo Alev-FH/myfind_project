@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
         } else if (pid == 0) {
             printf("Child process: %d\n", getpid());
             // Here we have to search for the files. This part of the code will be run only from the child processes.
-            exit(findFile(&sp, i));    // exit with the return value of the function find file. The return value will be captured by the parent process.
+            exit(findFile(&sp, i));    // exit with the return value of the function findFile. The return value will be captured by the parent process.
         } else {
             printf("Parent process: %d\n", getpid());
         }
@@ -87,11 +87,7 @@ int main(int argc, char *argv[]) {
             if (WIFEXITED(status)) {        // Check the return value of the child process.
                 int exit_code = WEXITSTATUS(status);
 
-                if (exit_code == FILE_FOUND) {
-                    fprintf(stdout, "File %s found\n", sp.files[sp.file_found]);
-                } else if (exit_code == FILE_NOT_FOUND) {
-                    fprintf(stdout, "File not found\n");
-                } else {
+                if (exit_code != FILE_FOUND && exit_code != FILE_NOT_FOUND) {
                     fprintf(stderr, "An error has occured!\n");
                     errors_occured++;
                 }
@@ -178,9 +174,11 @@ static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
         sp->file_found = active_file;
+        fprintf(stdout, "File %d %s found\n", sp->file_found, sp->files[sp->file_found]);
         return FILE_FOUND;
     }
 
+    fprintf(stdout, "File not found\n");
     sp->file_found = -1;
     return FILE_NOT_FOUND;
 }
