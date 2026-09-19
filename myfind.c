@@ -20,11 +20,13 @@ typedef struct {
     int i_enabled;        // Wether or not the option -R is passed as a parameter
     int num_of_files;     // The number of filenames extracted from the command
     int num_of_options;   // The number of options extracted from the command
+    int file_found;       // The index of the file that has been found.
 } SearchParams;
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
+static int findFile(SearchParams *sp, const int active_file);
+static int searchFolder(const char path[], const char file[], const int recursive, const int case_insensitive);
 static void print_usage(char *programm_name);
-static void lookUpFolder(char path[]);
 static void freeSearchParams(SearchParams *sp);
 
 int main(int argc, char *argv[]) {
@@ -55,9 +57,7 @@ int main(int argc, char *argv[]) {
         } else if (pid == 0) {
             printf("Child process: %d\n", getpid());
             // Here we have to search for the files. This part of the code will be run only from the child processes.
-            // int found = search_file(sp.files[i]);
-            lookUpFolder("/home/as/myfind_project");
-            exit(EXIT_FAILURE);
+            exit(findFile(&sp, i));    // exit with the return value of the function find file. The return value will be captured by the parent process.
         } else {
             printf("Parent process: %d\n", getpid());
         }
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
                 int exit_code = WEXITSTATUS(status);
 
                 if (exit_code == FILE_FOUND) {
-                    fprintf(stdout, "File found\n");
+                    fprintf(stdout, "File %s found\n", sp.files[sp.file_found]);
                 } else if (exit_code == FILE_NOT_FOUND) {
                     fprintf(stdout, "File not found\n");
                 } else {
@@ -174,24 +174,56 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
         }
     }
 }
-static void print_usage(char *programm_name) {
-    printf("Usage: %s [path] [-R] [-i] [dateiname 1 dateiname n]\n\n", programm_name);
+static int findFile(SearchParams *sp, const int active_file) {
+    // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
+    if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
+        sp->file_found = active_file;
+        return FILE_FOUND;
+    }
+
+    sp->file_found = -1;
+    return FILE_NOT_FOUND;
 }
-static void lookUpFolder(char path[]) {
+static int searchFolder(const char path[], const char file[], const int recursive, const int case_insensitive) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
         fprintf(stderr, "Could not open directory %s\n", path);
-        return;
+        return FILE_SEARCH_ERROR;
     }
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type != DT_UNKNOWN && entry->d_type == DT_DIR) {
-            printf("%s\n", entry->d_name);
+        if ((strncmp(entry->d_name, ".", strlen(entry->d_name)) != 0) && ((strncmp(entry->d_name, "..", strlen(entry->d_name)) != 0))) {
+
+            if (entry->d_type != DT_UNKNOWN && entry->d_type == DT_DIR) {        // Check if entry is a folder and enable recursivness if active.
+                if (recursive) {
+                    char new_path[PATH_MAX];
+                    int length = strlen(path) + strlen(entry->d_name) + 2;        // 1 for the null termination and 1 for the format / at next line of code.
+                    snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
+                    
+                    if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
+                        return FILE_FOUND;
+                    }
+                }
+            } else {
+                if (case_insensitive) {
+                    if (strncasecmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        return FILE_FOUND;
+                    }
+                } else {
+                    if (strncmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        return FILE_FOUND;
+                    }   
+                }
+            }
         }
     }
 
     closedir(dir);
+    return FILE_NOT_FOUND;
+}
+static void print_usage(char *programm_name) {
+    printf("Usage: %s [path] [-R] [-i] [dateiname 1 dateiname n]\n\n", programm_name);
 }
 static void freeSearchParams(SearchParams *sp) {
     free(sp->search_path);
