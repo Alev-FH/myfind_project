@@ -20,7 +20,6 @@ typedef struct {
     int i_enabled;        // Wether or not the option -R is passed as a parameter
     int num_of_files;     // The number of filenames extracted from the command
     int num_of_options;   // The number of options extracted from the command
-    int file_found;       // The index of the file that has been found.
 } SearchParams;
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
@@ -34,14 +33,14 @@ int main(int argc, char *argv[]) {
     SearchParams sp = { 0 };
     parseArguments(argc, argv, &sp);
 
-    // Print the SearchParams variables to see if the parseArguments function initializes them corectly.
+    // Print the SearchParams variables to see if the parseArguments function initializes them corectly. Thats for debugging only and will be removed.
     printf("path                    : %s\n", sp.search_path);
     printf("Recursive option        : %s\n", sp.R_enabled == 1 ? "true" : "false");
     printf("Case insensitive option : %s\n", sp.i_enabled == 1 ? "true" : "false");
     printf("num_of_files            : %d\n", sp.num_of_files);
     printf("num_of_options          : %d\n", sp.num_of_options);
 
-    // Pint the files for testing. This will be removed.
+    // Pint the files for testing and debugging. This will be removed.
     for (int i = 0; i < sp.num_of_files; i++) {
         printf("files: %s\n", sp.files[i]);
     }
@@ -173,13 +172,11 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
-        sp->file_found = active_file;
-        fprintf(stdout, "File %d %s found\n", sp->file_found, sp->files[sp->file_found]);
+        fprintf(stdout, "Found %s\n", sp->files[active_file]);
         return FILE_FOUND;
     }
 
-    fprintf(stdout, "File not found\n");
-    sp->file_found = -1;
+    fprintf(stdout, "Not found %s\n", sp->files[active_file]);
     return FILE_NOT_FOUND;
 }
 static int searchFolder(const char path[], const char file[], const int recursive, const int case_insensitive) {
