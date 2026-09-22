@@ -54,11 +54,10 @@ int main(int argc, char *argv[]) {
         if (pid == -1) {
             return EXIT_FAILURE;
         } else if (pid == 0) {
-            printf("Child process: %d\n", getpid());
-            // Here we have to search for the files. This part of the code will be run only from the child processes.
-            exit(findFile(&sp, i));    // exit with the return value of the function findFile. The return value will be captured by the parent process.
-        } else {
-            printf("Parent process: %d\n", getpid());
+            // Child process
+            int found = findFile(&sp, i);    // Here we have to search for the files. This part of the code will be run only from the child processes.
+            freeSearchParams(&sp);
+            exit(found);    // exit with the return value of the function findFile. The return value will be captured by the parent process.
         }
     }
 
@@ -108,63 +107,64 @@ int main(int argc, char *argv[]) {
 }
 /* Parses the argv array, initializing a SearchParams struct with the extracted values and other usefull informations. */
 static void parseArguments(int argc, char *argv[], SearchParams *sp) {
-    sp->files   = malloc(sizeof(double));
-    sp->options = malloc(sizeof(double));
+    char *programm_name = argv[0];
+    int c;
+    while ((c = getopt(argc, argv, "Ri")) != EOF) {
+        switch (c) {
+            case '?':
+                fprintf(stderr, "%s error: Unknown option.\n", programm_name);
+                print_usage(programm_name);
+                exit(1);
+            case 'R':
+                sp->R_enabled++;
+                break;
+            case 'i':
+                sp->i_enabled++;
+                break;
+            default:
+                assert(0);
+        }
+    }
 
-    // This is to help us increase the size of the pointers array
-    unsigned int files_inc     = 1;
-    unsigned int options_inc   = 1;
+    if ((sp->R_enabled > 1) || (sp->i_enabled > 1)) {
+        fprintf(stderr, "%s ERROR: same option provided more than once.\n", programm_name);
+        exit(1);
+    }
 
-    // This is to help us index the pointers of the pointers array.
-    unsigned int files_index   = 0;
-    unsigned int options_index = 0;
-    unsigned int path_aquired  = 0;
+    // Aquire options.
+    sp->num_of_options = optind - 1; // -1 here for the name of file. "optind" is the number of options, including program_name.
+    if (sp->num_of_options > 0) {
+        sp->options = malloc(sizeof(double) * sp->num_of_options);
 
-    if (argc > 1) {
+        int option_index = 0;
+        for (int i = 1; i < optind; i++) {        // Starting from 1 here because we want to ignore the program_name option.
+            sp->options[option_index] = strdup(argv[i]);
+            printf("Option aquired: %s\n", sp->options[option_index]);
+            option_index++;
+        }
+    }
 
-        for (int i = 1; i < argc; i++) {
-            if (strncmp(argv[i], "-", 1) == 0) {
+    // Aquire the path and files arguments.
+    if (optind < argc) {
 
-                // Check for specific flags
-                if (strcmp(argv[i], "-R") == 0) {
-                    sp->R_enabled = 1;
-                } else if (strcmp(argv[i], "-i") == 0) {
-                    sp->i_enabled = 1;
-                } else {
-                    fprintf(stdout, "Option %s is not supported, it will be ignored!\n", argv[i]);
-                    print_usage(argv[0]);
-                    continue;
-                }
+        sp->num_of_files = (argc - optind) - 1;  // -1 here for the search_path.
+        if (sp->num_of_files > 0) {
+            sp->files = malloc(sizeof(double) * sp->num_of_files);
+        }
 
-                char **temp = realloc(sp->options, sizeof(double) * options_inc);        // Increase the size of the pointers array by +1 pointer
-                if (temp == NULL) {
-                    fprintf(stderr, "Failed to reallocate memory for options array!\n");
-                    exit(-1);
-                }
-                sp->options = temp;
-                sp->options[options_index] = strdup(argv[i]);         // Allocate memory and copy the option argument to the pointers array options_index position.
+        int path_aquired = 0; int files_index = 0;
+        while (optind < argc) {
 
-                options_inc++;
-                options_index++;
-                sp->num_of_options++;
+            if (path_aquired == 0) {
+                sp->search_path = strdup(argv[optind]);
+                printf("aquired path: %s\n", sp->search_path);
+                optind++;
+                path_aquired++;
             } else {
-                if (path_aquired == 0) {        // The first non option argument after the argument 0 is always the path.
-                    sp->search_path = strdup(argv[i]);
-                    path_aquired++;
-                    continue;
-                }
-
-                char **temp = realloc(sp->files, sizeof(double) * files_inc);        // Increase the size of the pointers array by +1 pointer
-                if (temp == NULL) {
-                    fprintf(stderr, "Failed to reallocate memory for files array!\n");
-                    exit(-1);
-                }
-                sp->files = temp;
-                sp->files[files_index] = strdup(argv[i]);        // Allocate memory and copy the file argument to the pointers array files_index position.
-
-                files_inc++;
+                sp->files[files_index] = strdup(argv[optind]);
+                printf("aquired file: %s\n", sp->files[files_index]);
+                optind++;
                 files_index++;
-                sp->num_of_files++;
             }
         }
     }
@@ -197,16 +197,19 @@ static int searchFolder(const char path[], const char file[], const int recursiv
                     snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
                     
                     if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
+                        closedir(dir);
                         return FILE_FOUND;
                     }
                 }
             } else {
                 if (case_insensitive) {
                     if (strncasecmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        closedir(dir);
                         return FILE_FOUND;
                     }
                 } else {
                     if (strncmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        closedir(dir);
                         return FILE_FOUND;
                     }   
                 }
