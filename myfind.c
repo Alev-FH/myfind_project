@@ -100,61 +100,63 @@ int main(int argc, char *argv[]) {
 }
 /* Parses the argv array, initializing a SearchParams struct with the extracted values and other usefull informations. */
 static void parseArguments(int argc, char *argv[], SearchParams *sp) {
-    char *programm_name = argv[0];
-    int c;
-    while ((c = getopt(argc, argv, "Ri")) != EOF) {
-        switch (c) {
-            case '?':
-                fprintf(stderr, "%s error: Unknown option.\n", programm_name);
-                print_usage(programm_name);
-                exit(1);
-            case 'R':
-                sp->R_enabled++;
-                break;
-            case 'i':
-                sp->i_enabled++;
-                break;
-            default:
-                assert(0);
-        }
-    }
+    sp->files   = malloc(sizeof(double));
+    sp->options = malloc(sizeof(double));
 
-    if ((sp->R_enabled > 1) || (sp->i_enabled > 1)) {
-        fprintf(stderr, "%s ERROR: same option provided more than once.\n", programm_name);
-        exit(1);
-    }
+    // This is to help us increase the size of the pointers array
+    unsigned int files_inc     = 1;
+    unsigned int options_inc   = 1;
 
-    // Aquire options.
-    sp->num_of_options = optind - 1; // -1 here for the name of file. "optind" is the number of options, including program_name.
-    if (sp->num_of_options > 0) {
-        sp->options = malloc(sizeof(double) * sp->num_of_options);
+    // This is to help us index the pointers of the pointers array.
+    unsigned int files_index   = 0;
+    unsigned int options_index = 0;
+    unsigned int path_aquired  = 0;
 
-        int option_index = 0;
-        for (int i = 1; i < optind; i++) {        // Starting from 1 here because we want to ignore the program_name option.
-            sp->options[option_index] = strdup(argv[i]);    // Aquire the options from the arguments.
-            option_index++;
-        }
-    }
+    if (argc > 1) {
 
-    // Aquire the path and files arguments.
-    if (optind < argc) {
+        for (int i = 1; i < argc; i++) {
+            if (strncmp(argv[i], "-", 1) == 0) {
 
-        sp->num_of_files = (argc - optind) - 1;  // -1 here for the search_path.
-        if (sp->num_of_files > 0) {
-            sp->files = malloc(sizeof(double) * sp->num_of_files);
-        }
+                // Check for specific flags
+                if (strcmp(argv[i], "-R") == 0) {
+                    sp->R_enabled = 1;
+                } else if (strcmp(argv[i], "-i") == 0) {
+                    sp->i_enabled = 1;
+                } else {
+                    fprintf(stdout, "Option %s is not supported, it will be ignored!\n", argv[i]);
+                    print_usage(argv[0]);
+                    continue;
+                }
 
-        int path_aquired = 0; int files_index = 0;
-        while (optind < argc) {
+                char **temp = realloc(sp->options, sizeof(double) * options_inc);        // Increase the size of the pointers array by +1 pointer
+                if (temp == NULL) {
+                    fprintf(stderr, "Failed to reallocate memory for options array!\n");
+                    exit(-1);
+                }
+                sp->options = temp;
+                sp->options[options_index] = strdup(argv[i]);         // Allocate memory and copy the option argument to the pointers array options_index position.
 
-            if (path_aquired == 0) {
-                sp->search_path = strdup(argv[optind]);    // Aquire the path from the arguments.
-                optind++;
-                path_aquired++;
+                options_inc++;
+                options_index++;
+                sp->num_of_options++;
             } else {
-                sp->files[files_index] = strdup(argv[optind]);    // Aquire the files from the arguments.
-                optind++;
+                if (path_aquired == 0) {        // The first non option argument after the argument 0 is always the path.
+                    sp->search_path = strdup(argv[i]);
+                    path_aquired++;
+                    continue;
+                }
+
+                char **temp = realloc(sp->files, sizeof(double) * files_inc);        // Increase the size of the pointers array by +1 pointer
+                if (temp == NULL) {
+                    fprintf(stderr, "Failed to reallocate memory for files array!\n");
+                    exit(-1);
+                }
+                sp->files = temp;
+                sp->files[files_index] = strdup(argv[i]);        // Allocate memory and copy the file argument to the pointers array files_index position.
+
+                files_inc++;
                 files_index++;
+                sp->num_of_files++;
             }
         }
     }
@@ -186,8 +188,13 @@ static int searchFolder(char path[], const char file[], const int recursive, con
                     snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
                     
                     if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
-                        path = realloc(path, strlen(new_path));    // Copy the new_path to search_path.
-                        strncpy(path, new_path, strlen(new_path));
+                        char *temp = realloc(path, strlen(new_path));
+                        if (!temp) {
+                            fprintf(stderr, "Failed to allocate memory for the found search_path");
+                            return FILE_SEARCH_ERROR;
+                        }
+                        path = temp;
+                        strncpy(path, new_path, strlen(new_path));    // Copy the new_path to search_path.
                         closedir(dir);
                         return FILE_FOUND;
                     }
