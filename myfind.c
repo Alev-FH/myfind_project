@@ -24,26 +24,19 @@ typedef struct {
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
 static int findFile(SearchParams *sp, const int active_file);
-static int searchFolder(const char path[], const char file[], const int recursive, const int case_insensitive);
+static int searchFolder(char path[], const char file[], const int recursive, const int case_insensitive);
 static void print_usage(char *programm_name);
 static void freeSearchParams(SearchParams *sp);
 
+/* 
+    To print the path, when a file is found, we reallocate memory for the search_path variable of the SearchParams struct
+    and copy the current path into this char array. That is happening in the searchFolders function.
+
+*/
 int main(int argc, char *argv[]) {
 
     SearchParams sp = { 0 };
     parseArguments(argc, argv, &sp);
-
-    // Print the SearchParams variables to see if the parseArguments function initializes them corectly. Thats for debugging only and will be removed.
-    printf("path                    : %s\n", sp.search_path);
-    printf("Recursive option        : %s\n", sp.R_enabled == 1 ? "true" : "false");
-    printf("Case insensitive option : %s\n", sp.i_enabled == 1 ? "true" : "false");
-    printf("num_of_files            : %d\n", sp.num_of_files);
-    printf("num_of_options          : %d\n", sp.num_of_options);
-
-    // Pint the files for testing and debugging. This will be removed.
-    for (int i = 0; i < sp.num_of_files; i++) {
-        printf("files: %s\n", sp.files[i]);
-    }
 
     // Here we must fork so many times as num_of_files. Every process should search for a file.
     pid_t pid;
@@ -138,8 +131,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
 
         int option_index = 0;
         for (int i = 1; i < optind; i++) {        // Starting from 1 here because we want to ignore the program_name option.
-            sp->options[option_index] = strdup(argv[i]);
-            printf("Option aquired: %s\n", sp->options[option_index]);
+            sp->options[option_index] = strdup(argv[i]);    // Aquire the options from the arguments.
             option_index++;
         }
     }
@@ -156,13 +148,11 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
         while (optind < argc) {
 
             if (path_aquired == 0) {
-                sp->search_path = strdup(argv[optind]);
-                printf("aquired path: %s\n", sp->search_path);
+                sp->search_path = strdup(argv[optind]);    // Aquire the path from the arguments.
                 optind++;
                 path_aquired++;
             } else {
-                sp->files[files_index] = strdup(argv[optind]);
-                printf("aquired file: %s\n", sp->files[files_index]);
+                sp->files[files_index] = strdup(argv[optind]);    // Aquire the files from the arguments.
                 optind++;
                 files_index++;
             }
@@ -172,14 +162,13 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp) {
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
-        fprintf(stdout, "Found %s\n", sp->files[active_file]);
+        fprintf(stdout, "<%d>: <%s>: <%s>\n", getpid(), sp->files[active_file], sp->search_path);
         return FILE_FOUND;
     }
 
-    fprintf(stdout, "Not found %s\n", sp->files[active_file]);
     return FILE_NOT_FOUND;
 }
-static int searchFolder(const char path[], const char file[], const int recursive, const int case_insensitive) {
+static int searchFolder(char path[], const char file[], const int recursive, const int case_insensitive) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
         fprintf(stderr, "Could not open directory %s\n", path);
@@ -197,6 +186,8 @@ static int searchFolder(const char path[], const char file[], const int recursiv
                     snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
                     
                     if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
+                        path = realloc(path, strlen(new_path));    // Copy the new_path to search_path.
+                        strncpy(path, new_path, strlen(new_path));
                         closedir(dir);
                         return FILE_FOUND;
                     }
