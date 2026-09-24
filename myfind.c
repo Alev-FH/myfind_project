@@ -1,12 +1,13 @@
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
+#include <unistd.h> //Unix Standard
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <dirent.h>
+#include <limits.h>
+#include <dirent.h> //Directory Entries
 
 #define FILE_FOUND         0
 #define FILE_NOT_FOUND     1
@@ -14,12 +15,12 @@
 
 typedef struct {
     char *search_path;    // The search path. First argument after argument 0 that does is not an option, namely no -R or -i.
-    char **files;         // The files extracted from the command.
-    char **options;       // The options extracted from the command
-    int R_enabled;        // Wether or not the option -R is passed as a parameter 
-    int i_enabled;        // Wether or not the option -R is passed as a parameter
+    char **files;         // The files extracted from the command. (array of strings)
+
+    int R_enabled;        // Wether or not the option -R is passed as a parameter
+    int i_enabled;        // Wether or not the option -R is passed as a parameter(case insensitive)
     int num_of_files;     // The number of filenames extracted from the command
-    int num_of_options;   // The number of options extracted from the command
+  
 } SearchParams;
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
@@ -31,8 +32,11 @@ static void freeSearchParams(SearchParams *sp);
 /* 
     To print the path, when a file is found, we reallocate memory for the search_path variable of the SearchParams struct
     and copy the current path into this char array. That is happening in the searchFolders function.
-
 */
+
+/*To ensure that the output from multiple child processes does not interleave and remains readable in full lines, 
+we use a single fprintf() call ending with a newline character (\n) */
+
 int main(int argc, char *argv[]) {
 
     SearchParams sp = { 0 };
@@ -98,73 +102,81 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
-/* Parses the argv array, initializing a SearchParams struct with the extracted values and other usefull informations. */
-static void parseArguments(int argc, char *argv[], SearchParams *sp) {
-    sp->files   = malloc(sizeof(double));
-    sp->options = malloc(sizeof(double));
+/* Getopt */
+static void parseArguments(int argc, char *argv[], SearchParams *sp){
+    int c;
+    unsigned short Counter_Option_R = 0;
+    unsigned short Counter_Option_i = 0;
+    int error = 0;
 
-    // This is to help us increase the size of the pointers array
-    unsigned int files_inc     = 1;
-    unsigned int options_inc   = 1;
-
-    // This is to help us index the pointers of the pointers array.
-    unsigned int files_index   = 0;
-    unsigned int options_index = 0;
-    unsigned int path_aquired  = 0;
-
-    if (argc > 1) {
-
-        for (int i = 1; i < argc; i++) {
-            if (strncmp(argv[i], "-", 1) == 0) {
-
-                // Check for specific flags
-                if (strcmp(argv[i], "-R") == 0) {
-                    sp->R_enabled = 1;
-                } else if (strcmp(argv[i], "-i") == 0) {
-                    sp->i_enabled = 1;
-                } else {
-                    fprintf(stdout, "Option %s is not supported, it will be ignored!\n", argv[i]);
-                    print_usage(argv[0]);
-                    continue;
+    while ((c = getopt(argc, argv, "Ri")) != EOF) { //Catching flags
+        switch (c) {
+            case 'R':
+                if (Counter_Option_R) { //same flag can not be used multiple
+                    error = 1;
+                    break;
                 }
-
-                char **temp = realloc(sp->options, sizeof(double) * options_inc);        // Increase the size of the pointers array by +1 pointer
-                if (temp == NULL) {
-                    fprintf(stderr, "Failed to reallocate memory for options array!\n");
-                    exit(-1);
+                Counter_Option_R++;
+                sp->R_enabled = 1; //Enable
+                break;
+            case 'i':
+                if (Counter_Option_i) { 
+                    error = 1;
+                    break;
                 }
-                sp->options = temp;
-                sp->options[options_index] = strdup(argv[i]);         // Allocate memory and copy the option argument to the pointers array options_index position.
-
-                options_inc++;
-                options_index++;
-                sp->num_of_options++;
-            } else {
-                if (path_aquired == 0) {        // The first non option argument after the argument 0 is always the path.
-                    sp->search_path = strdup(argv[i]);
-                    path_aquired++;
-                    continue;
-                }
-
-                char **temp = realloc(sp->files, sizeof(double) * files_inc);        // Increase the size of the pointers array by +1 pointer
-                if (temp == NULL) {
-                    fprintf(stderr, "Failed to reallocate memory for files array!\n");
-                    exit(-1);
-                }
-                sp->files = temp;
-                sp->files[files_index] = strdup(argv[i]);        // Allocate memory and copy the file argument to the pointers array files_index position.
-
-                files_inc++;
-                files_index++;
-                sp->num_of_files++;
-            }
+                Counter_Option_i++;
+                sp->i_enabled = 1;
+                break;
+            case '?': // for unsupported flag
+                error = 1;
+                break;
+            default: 
+                assert(0); 
         }
     }
+    
+    if (error) { 
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    //Extracting the search path
+    if (optind < argc) {
+        
+        sp->search_path = malloc(strlen(argv[optind]) + 1);
+        if (sp->search_path == NULL) {
+            fprintf(stderr, "Memory allocation error!\n");
+            exit(EXIT_FAILURE);
+        }
+        strcpy(sp->search_path, argv[optind]);
+        optind++; 
+    }
+
+    //Extracting the files to search
+    sp->num_of_files = argc - optind;
+    if (sp->num_of_files > 0) {
+        sp->files = malloc(sizeof(char*) * sp->num_of_files);
+        if (sp->files == NULL) { exit(EXIT_FAILURE); }
+        
+        int file_index = 0;
+        while (optind < argc) {
+            sp->files[file_index] = malloc(strlen(argv[optind]) + 1);
+            if (sp->files[file_index] == NULL) { exit(EXIT_FAILURE); }
+            strcpy(sp->files[file_index], argv[optind]);
+            file_index++;
+            optind++;
+        }
+    } else {
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
 }
+
+
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
-        fprintf(stdout, "<%d>: <%s>: <%s>\n", getpid(), sp->files[active_file], sp->search_path);
+        fprintf(stdout, "<%d>: <%s>: <%s>\n", getpid(), sp->files[active_file], absolute_found_path);
         return FILE_FOUND;
     }
 
@@ -201,12 +213,12 @@ static int searchFolder(char path[], const char file[], const int recursive, con
                 }
             } else {
                 if (case_insensitive) {
-                    if (strncasecmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                    if (strcasecmp(entry->d_name, file) == 0) {
                         closedir(dir);
                         return FILE_FOUND;
                     }
                 } else {
-                    if (strncmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                    if (strcmp(entry->d_name, file) == 0) {
                         closedir(dir);
                         return FILE_FOUND;
                     }   
@@ -232,11 +244,4 @@ static void freeSearchParams(SearchParams *sp) {
         sp->files = NULL;
     }
 
-    if (sp->num_of_options) {
-        for (int i = 0; i < sp->num_of_options; i++) {
-            free(sp->options[i]);
-        }
-        free(sp->options);
-        sp->options = NULL;
     }
-}
