@@ -16,11 +16,9 @@
 typedef struct {
     char *search_path;    // The search path. First argument after argument 0 that does is not an option, namely no -R or -i.
     char **files;         // The files extracted from the command. (array of strings)
-
     int R_enabled;        // Wether or not the option -R is passed as a parameter
     int i_enabled;        // Wether or not the option -R is passed as a parameter(case insensitive)
     int num_of_files;     // The number of filenames extracted from the command
-  
 } SearchParams;
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
@@ -31,7 +29,8 @@ static void freeSearchParams(SearchParams *sp);
 
 /* 
     To print the path, when a file is found, we reallocate memory for the search_path variable of the SearchParams struct
-    and copy the current path into this char array. That is happening in the searchFolders function.
+    and copy the current path into this char array. That is happening in the searchFolders function. Then, in the findFile
+    function, we construct the absolut path by calling the realpath function.
 */
 
 /*To ensure that the output from multiple child processes does not interleave and remains readable in full lines, 
@@ -176,7 +175,14 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp){
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
-        fprintf(stdout, "<%d>: <%s>: <%s>\n", getpid(), sp->files[active_file], absolute_found_path);
+        
+        char *abs_path = realpath(sp->search_path, NULL);    // Construct the Absolut path if file found.
+        if (abs_path == NULL) {
+            fprintf(stderr, "Could not determine the absolut path!\n");
+            return FILE_SEARCH_ERROR;
+        }
+        fprintf(stdout, "<%d>: <%s>: <%s>\n", getpid(), sp->files[active_file], abs_path);
+        free(abs_path);
         return FILE_FOUND;
     }
 
@@ -189,6 +195,7 @@ static int searchFolder(char path[], const char file[], const int recursive, con
         return FILE_SEARCH_ERROR;
     }
 
+    int found = 0;
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         if ((strncmp(entry->d_name, ".", strlen(entry->d_name)) != 0) && ((strncmp(entry->d_name, "..", strlen(entry->d_name)) != 0))) {
@@ -200,27 +207,30 @@ static int searchFolder(char path[], const char file[], const int recursive, con
                     snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
                     
                     if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
-                        char *temp = realloc(path, strlen(new_path));
+                        char *temp = realloc(path, strlen(new_path) + 1);    // +1 for the null termination.
                         if (!temp) {
                             fprintf(stderr, "Failed to allocate memory for the found search_path");
-                            return FILE_SEARCH_ERROR;
+                            free(path);
+                            found++;
+                            break;
                         }
                         path = temp;
                         strncpy(path, new_path, strlen(new_path));    // Copy the new_path to search_path.
-                        closedir(dir);
-                        return FILE_FOUND;
+                        path[strlen(path)] = '\0';
+                        found++;
+                        break;
                     }
                 }
             } else {
                 if (case_insensitive) {
-                    if (strcasecmp(entry->d_name, file) == 0) {
-                        closedir(dir);
-                        return FILE_FOUND;
+                    if (strncasecmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        found++;
+                        break;
                     }
                 } else {
-                    if (strcmp(entry->d_name, file) == 0) {
-                        closedir(dir);
-                        return FILE_FOUND;
+                    if (strncmp(entry->d_name, file, strlen(entry->d_name)) == 0) {
+                        found++;
+                        break;
                     }   
                 }
             }
@@ -228,6 +238,9 @@ static int searchFolder(char path[], const char file[], const int recursive, con
     }
 
     closedir(dir);
+    if (found) {
+        return FILE_FOUND;
+    }
     return FILE_NOT_FOUND;
 }
 static void print_usage(char *programm_name) {
