@@ -32,10 +32,6 @@ static void freeSearchParams(SearchParams *sp);
     and copy the current path into this char array. That is happening in the searchFolders function. Then, in the findFile
     function, we construct the absolut path by calling the realpath function.
 */
-
-/*To ensure that the output from multiple child processes does not interleave and remains readable in full lines, 
-we use a single fprintf() call ending with a newline character (\n) */
-
 int main(int argc, char *argv[]) {
 
     SearchParams sp = { 0 };
@@ -148,6 +144,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp){
             exit(EXIT_FAILURE);
         }
         strcpy(sp->search_path, argv[optind]);
+        sp->search_path[strlen(sp->search_path)] = '\0';
         optind++; 
     }
 
@@ -170,8 +167,6 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp){
         exit(EXIT_FAILURE);
     }
 }
-
-
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
     if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
@@ -256,5 +251,4 @@ static void freeSearchParams(SearchParams *sp) {
         free(sp->files);
         sp->files = NULL;
     }
-
-    }
+}
