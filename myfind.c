@@ -23,7 +23,7 @@ typedef struct {
 
 static void parseArguments(int argc, char *argv[], SearchParams *sp);
 static int findFile(SearchParams *sp, const int active_file);
-static int searchFolder(char path[], const char file[], const int recursive, const int case_insensitive);
+static int searchFolder(char *path[], const char file[], const int recursive, const int case_insensitive);
 static void print_usage(char *programm_name);
 static void freeSearchParams(SearchParams *sp);
 
@@ -169,7 +169,7 @@ static void parseArguments(int argc, char *argv[], SearchParams *sp){
 }
 static int findFile(SearchParams *sp, const int active_file) {
     // Index the file we are looking for and pass it to searchPath, to search for it in folders. Pass the flags needed also.
-    if (searchFolder(sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
+    if (searchFolder(&sp->search_path, sp->files[active_file], sp->R_enabled, sp->i_enabled) == FILE_FOUND) {
         
         char *abs_path = realpath(sp->search_path, NULL);    // Construct the Absolut path if file found.
         if (abs_path == NULL) {
@@ -183,10 +183,10 @@ static int findFile(SearchParams *sp, const int active_file) {
 
     return FILE_NOT_FOUND;
 }
-static int searchFolder(char path[], const char file[], const int recursive, const int case_insensitive) {
-    DIR *dir = opendir(path);
+static int searchFolder(char *path[], const char file[], const int recursive, const int case_insensitive) {
+    DIR *dir = opendir(*path);
     if (dir == NULL) {
-        fprintf(stderr, "Could not open directory %s\n", path);
+        fprintf(stderr, "Could not open directory %s\n", *path);
         return FILE_SEARCH_ERROR;
     }
 
@@ -197,24 +197,26 @@ static int searchFolder(char path[], const char file[], const int recursive, con
 
             if (entry->d_type != DT_UNKNOWN && entry->d_type == DT_DIR) {        // Check if entry is a folder and enable recursivness if active.
                 if (recursive) {
-                    char new_path[PATH_MAX];
-                    int length = strlen(path) + strlen(entry->d_name) + 2;        // 1 for the null termination and 1 for the format / at next line of code.
-                    snprintf(new_path, length, "%s%s/", path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
-                    
-                    if (searchFolder(new_path, file, recursive, case_insensitive) == FILE_FOUND) {
-                        char *temp = realloc(path, strlen(new_path) + 1);    // +1 for the null termination.
+                    int length = strlen(*path) + strlen(entry->d_name) + 2;        // 1 for the null termination and 1 for the format / at next line of code.
+                    char *new_path = malloc(length);
+                    snprintf(new_path, length, "%s%s/", *path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
+
+                    if (searchFolder(&new_path, file, recursive, case_insensitive) == FILE_FOUND) {
+                        char *temp = realloc(*path, strlen(new_path) + 1);    // +1 for the null termination.
                         if (!temp) {
                             fprintf(stderr, "Failed to allocate memory for the found search_path");
                             free(path);
+                            free(new_path);
                             found++;
                             break;
                         }
-                        path = temp;
-                        strncpy(path, new_path, strlen(new_path));    // Copy the new_path to search_path.
-                        path[strlen(path)] = '\0';
+                        *path = temp;
+                        snprintf(*path, strlen(new_path), "%s", new_path);
                         found++;
+                        free(new_path);
                         break;
                     }
+                    free(new_path);
                 }
             } else {
                 if (case_insensitive) {
