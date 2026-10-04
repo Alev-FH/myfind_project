@@ -197,9 +197,21 @@ static int searchFolder(char *path[], const char file[], const int recursive, co
 
             if (entry->d_type != DT_UNKNOWN && entry->d_type == DT_DIR) {        // Check if entry is a folder and enable recursivness if active.
                 if (recursive) {
-                    int length = strlen(*path) + strlen(entry->d_name) + 2;        // 1 for the null termination and 1 for the format / at next line of code.
+
+                    int includes_slash = 0;
+                    if ((*path)[strlen(*path) - 1] == '/') {
+                        includes_slash = 1;
+                    }
+
+                    int length = strlen(*path) + strlen(entry->d_name) + 2 + includes_slash;        // 1 for the null termination and 1 for the "/" and end of new path. If user did not provided a path ending with a "/" +1 to add it in between.
                     char *new_path = malloc(length);
-                    snprintf(new_path, length, "%s%s/", *path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
+
+                    if (includes_slash) {
+                        snprintf(new_path, length, "%s%s/", *path, entry->d_name);        // Format a new path and pass it again to the function to be searched recursively.
+                    } else {
+                        snprintf(new_path, length, "%s/%s/", *path, entry->d_name);
+                    }
+                    
 
                     if (searchFolder(&new_path, file, recursive, case_insensitive) == FILE_FOUND) {
                         char *temp = realloc(*path, strlen(new_path) + 1);    // +1 for the null termination.

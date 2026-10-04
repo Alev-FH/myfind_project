@@ -26,3 +26,4 @@ code_cache.txt
 bone.*
 models/*
 !models/.gitkeep
+myfind
