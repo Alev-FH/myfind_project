@@ -211,7 +211,7 @@ static int searchFolder(char *path[], const char file[], const int recursive, co
                             break;
                         }
                         *path = temp;
-                        snprintf(*path, strlen(new_path), "%s", new_path);
+                        snprintf(*path, strlen(new_path) + 1, "%s", new_path); // +1 for the null termination.
                         found++;
                         free(new_path);
                         break;
